@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: kclconfig
+
+namespace: example
+
+configMapGenerator:
+  - name: kcl-root
+    files:
+      - schema.k
+      - kcl.mod.lock
+      - kcl.mod
+    options:
+      disableNameSuffixHash: true
+  - name: kcl-modules-azure
+    files:
+      - modules/azure/main.k
+    options:
+      disableNameSuffixHash: true
+  - name: kcl-modules-azuretest
+    files:
+      - modules/azuretest/rg.k
+      - modules/azuretest/main.k
+    options:
+      disableNameSuffixHash: true
+  - name: kcl-modules-k8s
+    files:
+      - modules/k8s/main.k
+    options:
+      disableNameSuffixHash: true
+  - name: kcl-templates
+    files:
+      - templates/deployment.k
+      - templates/service.k
+    options:
+      disableNameSuffixHash: true
+  - name: kcl-templates-azruetes
+    files:
+      - templates/azruetes/kkk.k
+    options:
+      disableNameSuffixHash: true
+  - name: kcl-templates-azure
+    files:
+      - templates/azure/rg.k
+    options:
+      disableNameSuffixHash: true

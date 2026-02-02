@@ -1,0 +1,97 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: crossplaneexamples.example.org
+  namespace: example
+spec:
+  scope: Namespaced
+  group: example.org
+  names:
+    kind: XCrossplaneExample
+    plural: crossplaneexamples
+  versions:
+    - name: v1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                stage:
+                  type: string
+                  description: The stage of the application
+                applicationname:
+                  type: string
+                  description: The name of the application
+                microservices:
+                  type: array
+                  description: The microservices of the application
+                  minItems: 1
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: The name of the microservice
+                      imageUrl:
+                        type: string
+                        description: The URL of the image of the application
+                      port:
+                        type: integer
+                        description: The port of the application
+                      targetPort:
+                        type: integer
+                        description: The target port of the application (for ingress)
+                      baseenvs:
+                        type: array
+                        description: base environment variables
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                              description: base environment variable name
+                            value:
+                              type: string
+                              description: base environment variable value
+                      secretenvs:
+                        type: array
+                        description: secret environment variables
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                              description: secret environment variables name
+                            keyvaultName:
+                              type: string
+                              description: secret environment variables keyvault name
+                      resources:
+                        type: object
+                        description: Resource requests and limits
+                        properties:
+                          requests:
+                            type: object
+                            properties:
+                              cpu:
+                                type: string
+                                default: "100m"
+                              memory:
+                                type: string
+                                default: "64Mi"
+                          limits:
+                            type: object
+                            properties:
+                              cpu:
+                                type: string
+                                default: "200m"
+                              memory:
+                                type: string
+                                default: "256Mi"
+                    required:
+                      - name
+                      - imageUrl
+                      - resources

@@ -1,0 +1,399 @@
+#!/usr/bin/env bash
+#
+# kcl-ccm - Generate Kustomize and Crossplane runtime config for KCL package mounting
+# Usage: kcl-ccm --manifest-root <path> --output-kustomize <path> [--output-runtime-config <path>]
+# SPDX-License-Identifier: MIT
+#
+
+set -euo pipefail
+
+readonly VERSION="0.1.0"
+readonly SCRIPT_NAME="kcl-ccm"
+
+# ------------------------------------------------------------------------------
+# Configuration
+# ------------------------------------------------------------------------------
+
+ROOT_DIR=""
+OUTPUT_KUSTOMIZE=""
+OUTPUT_RUNTIME_CONFIG=""
+DRY_RUN=false
+KUSTOMIZATION_NAME="${KUSTOMIZATION_NAME:-kclconfig}"
+RUNTIME_CONFIG_NAME="${RUNTIME_CONFIG_NAME:-default}"
+NAMESPACE="${NAMESPACE:-default}"
+CONTAINER_NAME="${CONTAINER_NAME:-package-runtime}"
+MOUNT_BASE="${MOUNT_BASE:-}"
+
+# ------------------------------------------------------------------------------
+# Utilities
+# ------------------------------------------------------------------------------
+
+log_info() {
+  printf '\033[0;32m[INFO]\033[0m %s\n' "$*" >&2
+}
+
+log_error() {
+  printf '\033[0;31m[ERROR]\033[0m %s\n' "$*" >&2
+}
+
+usage() {
+  cat <<EOF
+${SCRIPT_NAME} - Generate Kustomize and Crossplane runtime config for KCL package mounting
+
+USAGE:
+  ${SCRIPT_NAME} --manifest-root <path> --output-kustomize <path> [OPTIONS]
+
+REQUIRED:
+  --manifest-root <path>                  Path to KCL package root (directory containing kcl.mod, schema.k, etc.)
+  --output-kustomize <path>      Directory where kustomization.yaml will be created
+                                (must be same as --manifest-root or a parent; kustomize requires files to be under this dir)
+  --output-runtime-config <path>  Directory where runtime-config.yaml will be created
+
+OPTIONAL:
+  --namespace <name>             Kubernetes namespace for kustomization.yaml (ConfigMaps). runtime-config is always crossplane-system.
+  --kustomization-name <name>    metadata.name in kustomization.yaml (default: kclconfig)
+  --dry-run                      Print generated content to stdout without writing files
+  --force                        Reserved for future use (overwrite confirmation)
+  --help, -h                     Show this help message
+  --version, -v                  Show version
+
+ENVIRONMENT:
+  KUSTOMIZATION_NAME             metadata.name in kustomization (default: kclconfig)
+  RUNTIME_CONFIG_NAME            Name for DeploymentRuntimeConfig (default: kcl-ccm-templates)
+  NAMESPACE                      Namespace for kustomization/ConfigMaps (default: crossplane-system). runtime-config is always crossplane-system.
+  MOUNT_BASE                     Base mount path in container (default: /<manifest-root-basename>)
+
+EXAMPLES:
+  ${SCRIPT_NAME} --manifest-root ./02_example/kcl --output-kustomize ./02_example/kcl
+  ${SCRIPT_NAME} --manifest-root ./kcl --output-kustomize . --output-runtime-config ./precore
+
+EOF
+}
+
+# Convert path to Kubernetes-safe ConfigMap name (lowercase, hyphens)
+# e.g. "templates/k8s" -> "kcl-templates-k8s", "" -> "kcl-root"
+path_to_configmap_name() {
+  local path="$1"
+  if [[ -z "${path}" ]]; then
+    echo "kcl-root"
+  else
+    echo "kcl-${path}" | tr '/' '-' | tr '_' '-' | tr '[:upper:]' '[:lower:]'
+  fi
+}
+
+# Get relative path from base to target (portable, safe against path injection)
+# Prefers: GNU realpath > Python 3 > Python 2 > Perl
+get_relative_path() {
+  local base="$1"
+  local target="$2"
+  if command -v realpath &>/dev/null; then
+    realpath --relative-to="$base" "$target" 2>/dev/null && return
+  fi
+  if command -v python3 &>/dev/null; then
+    python3 -c "import os.path, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))" "$target" "$base"
+  elif command -v python &>/dev/null; then
+    python -c "import os.path, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))" "$target" "$base"
+  elif command -v perl &>/dev/null; then
+    perl -e "use File::Spec; print File::Spec->abs2rel(shift, shift)" "$target" "$base"
+  else
+    log_error "Cannot compute relative paths. Need one of: realpath (GNU), python3, python, or perl."
+    exit 2
+  fi
+}
+
+# ------------------------------------------------------------------------------
+# Scan and collect
+# ------------------------------------------------------------------------------
+
+# Find all directories under root that have at least one direct file
+# Returns paths relative to root, sorted. Ignores folders starting with "test"
+find_subfolders_with_files() {
+  local root="$1"
+  find "$root" -type d -mindepth 1 2>/dev/null | while read -r dir; do
+    if [[ -n "$(find "$dir" -maxdepth 1 -type f 2>/dev/null)" ]]; then
+      get_relative_path "$root" "$dir"
+    fi
+  done | grep -v -E '(^|/)test' | sort -u
+}
+
+# Get direct files in dir (relative to root), one per line
+# Only includes .k, .mod, and .lock files
+get_direct_files() {
+  local root="$1"
+  local subdir="$2"
+  local full_dir
+  if [[ -z "$subdir" ]]; then
+    full_dir="$root"
+  else
+    full_dir="$root/$subdir"
+  fi
+  find "$full_dir" -maxdepth 1 -type f 2>/dev/null | while read -r f; do
+    get_relative_path "$root" "$f"
+  done | grep -E '\.(k|mod|lock)$' || true
+}
+
+# ------------------------------------------------------------------------------
+# Generate kustomization.yaml
+# ------------------------------------------------------------------------------
+
+generate_kustomization() {
+  local root_abs="$1"
+  local output_abs="$2"
+  local prefix
+  prefix=$(get_relative_path "$output_abs" "$root_abs")
+  [[ "$prefix" == "." ]] && prefix=""
+
+  cat <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: ${KUSTOMIZATION_NAME}
+
+namespace: ${NAMESPACE}
+
+configMapGenerator:
+EOF
+
+  # Root configMap (only .k, .mod, .lock files)
+  local root_files
+  root_files=$(get_direct_files "$root_abs" "")
+  if [[ -n "$root_files" ]]; then
+    local name
+    name=$(path_to_configmap_name "")
+    echo "  - name: ${name}"
+    echo "    files:"
+    while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      if [[ -n "$prefix" ]]; then
+        echo "      - ${prefix}/${f}"
+      else
+        echo "      - ${f}"
+      fi
+    done <<<"$root_files"
+    echo "    options:"
+    echo "      disableNameSuffixHash: true"
+  fi
+
+  # Subfolder configMaps
+  while IFS= read -r sub; do
+    [[ -z "$sub" ]] && continue
+    local files
+    files=$(get_direct_files "$root_abs" "$sub")
+    [[ -z "$files" ]] && continue
+
+    local name
+    name=$(path_to_configmap_name "$sub")
+    echo "  - name: ${name}"
+    echo "    files:"
+    while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      if [[ -n "$prefix" ]]; then
+        echo "      - ${prefix}/${f}"
+      else
+        echo "      - ${f}"
+      fi
+    done <<<"$files"
+    echo "    options:"
+    echo "      disableNameSuffixHash: true"
+  done < <(find_subfolders_with_files "$root_abs")
+}
+
+# ------------------------------------------------------------------------------
+# Generate runtime-config.yaml
+# ------------------------------------------------------------------------------
+
+generate_runtime_config() {
+  local root_abs="$1"
+  local configmaps=()
+
+  # Root (only .k, .mod, .lock files)
+  local root_files
+  root_files=$(get_direct_files "$root_abs" "")
+  if [[ -n "$root_files" ]]; then
+    configmaps+=("")
+  fi
+
+  # Subfolders
+  while IFS= read -r sub; do
+    [[ -z "$sub" ]] && continue
+    local files
+    files=$(get_direct_files "$root_abs" "$sub")
+    [[ -n "$files" ]] && configmaps+=("$sub")
+  done < <(find_subfolders_with_files "$root_abs")
+
+  cat <<EOF
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: ${RUNTIME_CONFIG_NAME}
+  namespace: crossplane-system
+spec:
+  deploymentTemplate:
+    spec:
+      selector: {}
+      template:
+        spec:
+          containers:
+            - name: ${CONTAINER_NAME}
+              volumeMounts:
+EOF
+
+  # volumeMounts: root first, then subfolders
+  for sub in "${configmaps[@]}"; do
+    local name
+    name=$(path_to_configmap_name "$sub")
+    local mount_path
+    if [[ -z "$sub" ]]; then
+      mount_path="${MOUNT_BASE}"
+    else
+      mount_path="${MOUNT_BASE}/${sub}"
+    fi
+    echo "                - mountPath: ${mount_path}"
+    echo "                  name: ${name}"
+    echo "                  readOnly: true"
+  done
+
+  echo "          volumes:"
+  for sub in "${configmaps[@]}"; do
+    local name
+    name=$(path_to_configmap_name "$sub")
+    echo "            - name: ${name}"
+    echo "              configMap:"
+    echo "                name: ${name}"
+  done
+}
+
+# ------------------------------------------------------------------------------
+# Main
+# ------------------------------------------------------------------------------
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --manifest-root)
+        [[ -z "${2:-}" ]] && { log_error "Missing value for --manifest-root"; usage; exit 1; }
+        ROOT_DIR="$2"
+        shift 2
+        ;;
+      --output-kustomize)
+        [[ -z "${2:-}" ]] && { log_error "Missing value for --output-kustomize"; usage; exit 1; }
+        OUTPUT_KUSTOMIZE="$2"
+        shift 2
+        ;;
+      --output-runtime-config)
+        [[ -z "${2:-}" ]] && { log_error "Missing value for --output-runtime-config"; usage; exit 1; }
+        OUTPUT_RUNTIME_CONFIG="$2"
+        shift 2
+        ;;
+      --namespace)
+        [[ -z "${2:-}" ]] && { log_error "Missing value for --namespace"; usage; exit 1; }
+        NAMESPACE="$2"
+        shift 2
+        ;;
+      --kustomization-name)
+        [[ -z "${2:-}" ]] && { log_error "Missing value for --kustomization-name"; usage; exit 1; }
+        KUSTOMIZATION_NAME="$2"
+        shift 2
+        ;;
+      --dry-run)
+        DRY_RUN=true
+        shift
+        ;;
+      --force)
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      --version|-v)
+        echo "${SCRIPT_NAME} ${VERSION}"
+        exit 0
+        ;;
+      *)
+        log_error "Unknown option: $1"
+        usage
+        exit 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$ROOT_DIR" ]] || [[ -z "$OUTPUT_KUSTOMIZE" ]]; then
+    log_error "Required options --manifest-root and --output-kustomize must be specified"
+    usage
+    exit 1
+  fi
+
+  if [[ -z "$OUTPUT_RUNTIME_CONFIG" ]]; then
+    if [[ -d "${OUTPUT_KUSTOMIZE}/precore" ]]; then
+      OUTPUT_RUNTIME_CONFIG="${OUTPUT_KUSTOMIZE}/precore"
+    else
+      OUTPUT_RUNTIME_CONFIG="$OUTPUT_KUSTOMIZE"
+    fi
+  fi
+}
+
+# Ensure root is same as or under output-kustomize (kustomize security requirement)
+validate_paths() {
+  local root_abs output_abs
+  root_abs=$(cd "$ROOT_DIR" && pwd)
+  output_abs=$(cd "$OUTPUT_KUSTOMIZE" && pwd)
+
+  if [[ "$root_abs" != "$output_abs" ]] && [[ "${root_abs}/" != "${output_abs}/"* ]]; then
+    log_error "Root must be the same as or a subdirectory of output-kustomize."
+    log_error "  Root: $root_abs"
+    log_error "  Output: $output_abs"
+    log_error "Kustomize requires all referenced files to be under the kustomization directory."
+    exit 2
+  fi
+}
+
+main() {
+  parse_args "$@"
+
+  if [[ ! -d "$ROOT_DIR" ]]; then
+    log_error "Root directory does not exist or is not a directory: $ROOT_DIR"
+    exit 2
+  fi
+
+  if [[ ! -d "$OUTPUT_KUSTOMIZE" ]]; then
+    log_error "Output kustomize directory does not exist: $OUTPUT_KUSTOMIZE"
+    exit 2
+  fi
+
+  validate_paths
+
+  local root_abs output_abs
+  root_abs=$(cd "$ROOT_DIR" && pwd)
+  output_abs=$(cd "$OUTPUT_KUSTOMIZE" && pwd)
+
+  # Derive mount base from manifest-root name if not set via env
+  if [[ -z "${MOUNT_BASE}" ]]; then
+    MOUNT_BASE="/$(basename "$root_abs")"
+  fi
+
+  if [[ "$DRY_RUN" == true ]]; then
+    log_info "[DRY-RUN] Would generate kustomization.yaml and runtime-config.yaml"
+    log_info "[DRY-RUN] --- kustomization.yaml ---"
+    generate_kustomization "$root_abs" "$output_abs"
+    log_info "[DRY-RUN] --- runtime-config.yaml ---"
+    generate_runtime_config "$root_abs"
+    log_info "[DRY-RUN] Done. No files written."
+    return
+  fi
+
+  mkdir -p "$OUTPUT_RUNTIME_CONFIG"
+
+  local kust_file="${OUTPUT_KUSTOMIZE}/kustomization.yaml"
+  local runtime_file="${OUTPUT_RUNTIME_CONFIG}/runtime-config.yaml"
+
+  log_info "Generating kustomization.yaml in ${OUTPUT_KUSTOMIZE}"
+  generate_kustomization "$root_abs" "$output_abs" > "$kust_file"
+
+  log_info "Generating runtime-config.yaml in ${OUTPUT_RUNTIME_CONFIG}"
+  generate_runtime_config "$root_abs" > "$runtime_file"
+
+  log_info "Done."
+}
+
+main "$@"

@@ -1,0 +1,23 @@
+apiVersion: example.org/v1
+kind: XExampleapplication
+metadata:
+  name: example-application
+  namespace: example-namespace
+spec:
+  stage: dev
+  applicationname: example
+  microservices:
+    - name: example
+      imageUrl: example.examplecr.io/example:0.1
+      port: 80
+      targetPort: 80
+      baseenvs:
+        - name: EXAMPLE_ENV
+          value: example-value
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "200m"
+          memory: "256Mi"

@@ -1,0 +1,27 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: example-composition
+  namespace: example-namespace
+spec:
+  compositeTypeRef:
+    apiVersion: example.org/v1
+    kind: XCrossplaneExample
+  mode: Pipeline
+  pipeline:
+    - step: create-k8s-example
+      functionRef:
+        name: kcl-function
+      input:
+        apiVersion: krm.kcl.dev/v1alpha1
+        kind: KCLInput
+        spec:
+          source: /kcl/packages/k8s/main.k
+    - step: create-azure-example
+      functionRef:
+        name: kcl-function
+      input:
+        apiVersion: krm.kcl.dev/v1alpha1
+        kind: KCLInput
+        spec:
+          source: /kcl/packages/azure/main.k
