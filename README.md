@@ -1,4 +1,4 @@
-# Using KCL for Crossplane compositions with kcl-ccm
+# KCL in Crossplane compositions with kcl-ccm
 
 A CLI tool that scans a KCL package root and generates:
 
