@@ -3,7 +3,7 @@ kind: Kustomization
 metadata:
   name: kclconfig
 
-namespace: example
+namespace: crossplane-system
 
 configMapGenerator:
   - name: kcl-root
@@ -18,12 +18,6 @@ configMapGenerator:
       - modules/azure/main.k
     options:
       disableNameSuffixHash: true
-  - name: kcl-modules-azuretest
-    files:
-      - modules/azuretest/rg.k
-      - modules/azuretest/main.k
-    options:
-      disableNameSuffixHash: true
   - name: kcl-modules-k8s
     files:
       - modules/k8s/main.k
@@ -33,11 +27,6 @@ configMapGenerator:
     files:
       - templates/deployment.k
       - templates/service.k
-    options:
-      disableNameSuffixHash: true
-  - name: kcl-templates-azruetes
-    files:
-      - templates/azruetes/kkk.k
     options:
       disableNameSuffixHash: true
   - name: kcl-templates-azure

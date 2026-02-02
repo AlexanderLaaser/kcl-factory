@@ -77,7 +77,7 @@ ConfigMaps and volumes use Kubernetes-style names (lowercase, hyphens):
 | Variable              | Default                     | Description                                                                           |
 | --------------------- | --------------------------- | ------------------------------------------------------------------------------------- |
 | `KUSTOMIZATION_NAME`  | `kclconfig`                 | Kustomization metadata name                                                           |
-| `RUNTIME_CONFIG_NAME` | `kcl-ccm-templates`         | DeploymentRuntimeConfig name                                                          |
+| `RUNTIME_CONFIG_NAME` | `default`                   | DeploymentRuntimeConfig name                                                          |
 | `NAMESPACE`           | `crossplane-system`         | Namespace for kustomization/ConfigMaps. runtime-config is always `crossplane-system`. |
 | `MOUNT_BASE`          | `/<manifest-root-basename>` | Base mount path in container                                                          |
 

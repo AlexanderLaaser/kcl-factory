@@ -2,7 +2,7 @@ apiVersion: pkg.crossplane.io/v1beta1
 kind: DeploymentRuntimeConfig
 metadata:
   name: default
-  namespace: example
+  namespace: crossplane-system
 spec:
   deploymentTemplate:
     spec:
@@ -14,25 +14,19 @@ spec:
               volumeMounts:
                 - mountPath: /kcl
                   name: kcl-root
-                  readOnly: false
+                  readOnly: true
                 - mountPath: /kcl/modules/azure
                   name: kcl-modules-azure
-                  readOnly: false
-                - mountPath: /kcl/modules/azuretest
-                  name: kcl-modules-azuretest
-                  readOnly: false
+                  readOnly: true
                 - mountPath: /kcl/modules/k8s
                   name: kcl-modules-k8s
-                  readOnly: false
+                  readOnly: true
                 - mountPath: /kcl/templates
                   name: kcl-templates
-                  readOnly: false
-                - mountPath: /kcl/templates/azruetes
-                  name: kcl-templates-azruetes
-                  readOnly: false
+                  readOnly: true
                 - mountPath: /kcl/templates/azure
                   name: kcl-templates-azure
-                  readOnly: false
+                  readOnly: true
           volumes:
             - name: kcl-root
               configMap:
@@ -40,18 +34,12 @@ spec:
             - name: kcl-modules-azure
               configMap:
                 name: kcl-modules-azure
-            - name: kcl-modules-azuretest
-              configMap:
-                name: kcl-modules-azuretest
             - name: kcl-modules-k8s
               configMap:
                 name: kcl-modules-k8s
             - name: kcl-templates
               configMap:
                 name: kcl-templates
-            - name: kcl-templates-azruetes
-              configMap:
-                name: kcl-templates-azruetes
             - name: kcl-templates-azure
               configMap:
                 name: kcl-templates-azure

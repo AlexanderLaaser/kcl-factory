@@ -11,10 +11,10 @@ install:
 	install -m 755 01_scripts/kcl-ccm "$(BINDIR)/kcl-ccm"
 
 uninstall:
-	rm -f "$(BINDIR)/kcl-ccm" "$(BINDIR)/kcl-cmm"
+	rm -f "$(BINDIR)/kcl-ccm"
 
 test:
-	./01_scripts/kcl-ccm --manifest-root ./02_example/kcl --output-kustomize ./02_example/kcl --output-runtime-config ./02_example/crossplane --namespace 02_example
+	./01_scripts/kcl-ccm --manifest-root ./02_example/kcl --output-kustomize ./02_example/kcl --output-runtime-config ./02_example/crossplane --namespace default
 	@echo "Generated files:"
 	@ls -la 02_example/kcl/kustomization.yaml 02_example/crossplane/runtime-config.yaml
 

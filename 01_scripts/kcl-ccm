@@ -20,8 +20,7 @@ OUTPUT_RUNTIME_CONFIG=""
 DRY_RUN=false
 KUSTOMIZATION_NAME="${KUSTOMIZATION_NAME:-kclconfig}"
 RUNTIME_CONFIG_NAME="${RUNTIME_CONFIG_NAME:-default}"
-NAMESPACE="${NAMESPACE:-default}"
-CONTAINER_NAME="${CONTAINER_NAME:-package-runtime}"
+NAMESPACE="${NAMESPACE:-crossplane-system}"
 MOUNT_BASE="${MOUNT_BASE:-}"
 
 # ------------------------------------------------------------------------------
@@ -59,7 +58,7 @@ OPTIONAL:
 
 ENVIRONMENT:
   KUSTOMIZATION_NAME             metadata.name in kustomization (default: kclconfig)
-  RUNTIME_CONFIG_NAME            Name for DeploymentRuntimeConfig (default: kcl-ccm-templates)
+  RUNTIME_CONFIG_NAME            Name for DeploymentRuntimeConfig (default: default)
   NAMESPACE                      Namespace for kustomization/ConfigMaps (default: crossplane-system). runtime-config is always crossplane-system.
   MOUNT_BASE                     Base mount path in container (default: /<manifest-root-basename>)
 
@@ -234,7 +233,7 @@ spec:
       template:
         spec:
           containers:
-            - name: ${CONTAINER_NAME}
+            - name: package-runtime
               volumeMounts:
 EOF
 
