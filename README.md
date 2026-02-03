@@ -1,37 +1,43 @@
 # Using KCL in Crossplane compositions with kcl-factory
 
-## Problems
-
-If you want to implement complex, enterprise-scale Crossplane compositions with KCL, you will likely run into one of these approaches—each with its own drawbacks:
-
-- **❌ KCL Inline** — You embed KCL code as a string directly in the Composition (e.g. in a ConfigMap or in the Function input). That gives a bad development experience: no syntax highlighting, no modules or imports, and no reusability across compositions. Changing one line means editing large YAML blocks.
-
-- **❌ Artifact / OCI package** — You publish your KCL as an OCI artifact (e.g. to a container registry) and reference it by tag. That requires a third-party registry, versioning and release process, and often credentials in the cluster to pull the image. Not ideal when you want everything in Git and one `kcl run` locally.
-
-- **❌ Repo sync (e.g. Git clone in-cluster)** — A controller or init container clones a Git repo into the function’s filesystem. You then need to manage credentials (SSH keys, tokens, or deploy keys) inside the cluster and handle rotation and security. Extra moving parts and no single-command workflow from your repo.
-
-**kcl-factory** addresses this by keeping KCL in your repo and generating the wiring: it scans a KCL package root and produces:
-
-1. **kustomization.yaml** – ConfigMap definitions for each folder (root + subfolders)
-2. **runtime-config.yaml** – Crossplane `DeploymentRuntimeConfig` with volume mounts
-
-✅ This lets you mount your KCL files into the runtime container of a Crossplane KCL function "function-kcl" with a single command.
-
 ## Crossplane Composition Approaches
 
 Comparison of possible ways to implement a composition in Crossplane:
 
-| Criterion                | Patch & Transform                     | Go Template                  | KCL Inline                   | kcl-factory                   |
-| ------------------------ | ------------------------------------- | ---------------------------- | ---------------------------- | ----------------------------- |
-| **Readability**          | ❌ boilerplate code for patches       | ⚠️ Go's text/template engine | ❌ Long inline strings       | ✅ Structured files           |
-| **Local development**    | ❌ YAML only                          | ⚠️ Needs `helm template`     | ✅ Inline in Composition     | ✅ `kcl run` in repo          |
-| **Loops & conditionals** | ❌ Limited (Composition patches only) | ✅ Go templating             | ✅ Full KCL                  | ✅ Full KCL                   |
-| **Modularity**           | ❌ Monolithic YAML                    | ✅ Helm charts               | ❌ Per-Composition, no split | ✅ Separate packages, modules |
-| **Reusability**          | ❌ Copy-paste                         | ✅ Chart reuse               | ❌ Per-Composition           | ✅ Import across Compositions |
-| **Testability**          | ❌ Hard to unit-test                  | ⚠️ Chart tests               | ⚠️ Extract & test            | ✅ `kcl run` locally          |
-| **Runs in CI/CD**        | ✅ Plain YAML                         | ⚠️ Helm in pipeline          | ✅ No extra steps            | ✅ Script + Kustomize         |
+| Criterion                | Patch & Transform                     | Go Template                  | KCL                                      |
+| ------------------------ | ------------------------------------- | ---------------------------- | ---------------------------------------- |
+| **Readability**          | ❌ boilerplate code for patches       | ⚠️ Go's text/template engine | ✅ Structured files and clear kcl syntax |
+| **Local development**    | ❌ YAML only                          | ⚠️ Needs `helm template`     | ✅ `kcl run` in repo                     |
+| **Loops & conditionals** | ❌ Limited (Composition patches only) | ✅ Go templating             | ✅ Full KCL                              |
+| **Modularity**           | ❌ Monolithic YAML                    | ✅ Helm charts               | ✅ Separate packages, modules            |
+| **Reusability**          | ❌ Copy-paste                         | ✅ Chart reuse               | ✅ Import across Compositions            |
+| **Testability**          | ❌ Hard to unit-test                  | ⚠️ Chart tests               | ✅ `kcl run` locally                     |
+| **Runs in CI/CD**        | ✅ Plain YAML                         | ⚠️ Helm in pipeline          | ✅ Script + Kustomize                    |
 
-**Summary:** Patch & Transform suits simple, static compositions. Go fits teams with existing charts. KCL Inline is minimal (no mounting) but not modular and hard to further develop. **kcl-factory** adds modularity with local development, full KCL Package modularity and structured files in one repo.
+**Summary:** Patch & Transform suits simple, static compositions. Go fits teams with existing charts, but lacks readability. KCL gives full language power but, is modular and easy to develop and reuse—see.
+
+## Problems
+
+Ok, after reading the comparison of the different Crossplane V2 approaches and the decision made that you are going to implement your enterprise-scale Crossplane compositions with KCL, you will likely run into one of these problems:
+
+**❌ KCL Inline** — You embed KCL code as a string directly in the Composition (which is currently used in [public function-kcl examples](https://github.com/crossplane-contrib/function-kcl)). That gives a bad development experience: no syntax highlighting, no modules or imports, and no reusability across compositions. Changing one line means editing large YAML blocks.
+
+**❌ Artifact / OCI package** — You can publish your KCL as an OCI artifact (e.g. to a container registry) and reference it by tag. That requires a third-party registry, versioning and release process, and often credentials in the cluster to pull the image. Not ideal when you want everything in Git and one `kcl run` locally.
+
+**❌ Repo sync (e.g. Git clone in-cluster)** — A controller or init container clones a Git repo into the function’s filesystem. You then need to manage credentials (SSH keys, tokens, or deploy keys) inside the cluster and handle rotation and security. Extra moving parts and no single-command workflow from your repo.
+
+## Technical Solution
+
+**kcl-factory** addresses all of these problems by automating the generation of the following two files:
+
+1. **kustomization.yaml** – ConfigMap definitions for each folder (root + subfolders)
+2. **runtime-config.yaml** – Crossplane `DeploymentRuntimeConfig` with volume mounts, that you can use to add to your "function-kcl" function pod to execute KCL code at runtime
+
+✅ **One command, no manual YAML** — Run `kcl-factory` once; it generates `kustomization.yaml` and `runtime-config.yaml` so your KCL package is mounted into the [function-kcl](https://github.com/crossplane-contrib/function-kcl) runtime. No hand-written ConfigMaps or volume specs.
+✅ **Boilerplate code generation** — Folder structure (root + subfolders) is scanned automatically; each folder becomes a ConfigMap and the correct mount paths are set. Change your KCL layout, re-run the tool, done.
+✅ **Modularity and local dev** — Keep full KCL packages (modules, imports, `kcl.mod`) in your repo. Use `kcl run` locally with the same structure that runs in the cluster. One source of truth, no inline strings.
+
+- **Less composition complexity** — Define KCL modules that create Kubernetes resources; your Composition stays a thin pipeline that just calls the function with a `source` path. The heavy logic lives in reusable KCL, not in YAML patches.
 
 ### Requirements
 
@@ -147,6 +153,10 @@ To commit generated files back to the repo, add the following step and set `perm
 | `RUNTIME_CONFIG_NAME` | `default`                   | DeploymentRuntimeConfig name                                                          |
 | `NAMESPACE`           | `crossplane-system`         | Namespace for kustomization/ConfigMaps. runtime-config is always `crossplane-system`. |
 | `MOUNT_BASE`          | `/<manifest-root-basename>` | Base mount path in container                                                          |
+
+---
+
+⭐ **Enjoying kcl-factory?** If this tool helps you ship KCL-based Crossplane compositions with less friction, consider giving the repo a ⭐ — it supports further development and helps others discover it. Thanks!
 
 ## License
 
