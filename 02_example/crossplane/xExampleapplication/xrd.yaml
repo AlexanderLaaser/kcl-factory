@@ -1,14 +1,14 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: crossplaneexamples.example.org
+  name: exampleapplications.example.org
   namespace: example
 spec:
   scope: Namespaced
   group: example.org
   names:
-    kind: XCrossplaneExample
-    plural: crossplaneexamples
+    kind: XExampleApplication
+    plural: exampleapplications
   versions:
     - name: v1
       served: true
@@ -65,10 +65,10 @@ spec:
                           properties:
                             name:
                               type: string
-                              description: secret environment variables name
+                              description: secret environment variable name
                             keyvaultName:
                               type: string
-                              description: secret environment variables keyvault name
+                              description: secret environment variable Key Vault name
                       resources:
                         type: object
                         description: Resource requests and limits

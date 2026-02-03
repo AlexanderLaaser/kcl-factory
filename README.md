@@ -1,6 +1,16 @@
 # Using KCL in Crossplane compositions with kcl-factory
 
-A CLI tool that scans a KCL package root and generates:
+## Problems
+
+If you want to implement complex, enterprise-scale Crossplane compositions with KCL, you will likely run into one of these approaches—each with its own drawbacks:
+
+- **❌ KCL Inline** — You embed KCL code as a string directly in the Composition (e.g. in a ConfigMap or in the Function input). That gives a bad development experience: no syntax highlighting, no modules or imports, and no reusability across compositions. Changing one line means editing large YAML blocks.
+
+- **❌ Artifact / OCI package** — You publish your KCL as an OCI artifact (e.g. to a container registry) and reference it by tag. That requires a third-party registry, versioning and release process, and often credentials in the cluster to pull the image. Not ideal when you want everything in Git and one `kcl run` locally.
+
+- **❌ Repo sync (e.g. Git clone in-cluster)** — A controller or init container clones a Git repo into the function’s filesystem. You then need to manage credentials (SSH keys, tokens, or deploy keys) inside the cluster and handle rotation and security. Extra moving parts and no single-command workflow from your repo.
+
+**kcl-factory** addresses this by keeping KCL in your repo and generating the wiring: it scans a KCL package root and produces:
 
 1. **kustomization.yaml** – ConfigMap definitions for each folder (root + subfolders)
 2. **runtime-config.yaml** – Crossplane `DeploymentRuntimeConfig` with volume mounts
@@ -9,7 +19,7 @@ A CLI tool that scans a KCL package root and generates:
 
 ## Crossplane Composition Approaches
 
-Comparison possible ways to implement a compositon in crossplane:
+Comparison of possible ways to implement a composition in Crossplane:
 
 | Criterion                | Patch & Transform                     | Go Template                  | KCL Inline                   | kcl-factory                   |
 | ------------------------ | ------------------------------------- | ---------------------------- | ---------------------------- | ----------------------------- |
@@ -127,7 +137,7 @@ jobs:
             --output-runtime-config ./02_example/crossplane
 ```
 
-To commit generated files back to the repo, add the following step and set `permissions: contents: write` on the job
+To commit generated files back to the repo, add the following step and set `permissions: contents: write` on the job.
 
 ## Environment Variables
 
@@ -140,4 +150,4 @@ To commit generated files back to the repo, add the following step and set `perm
 
 ## License
 
-MIT (or adjust as needed for your project)
+License: MIT. See [LICENSE](LICENSE).

@@ -1,0 +1,9 @@
+apiVersion: pkg.crossplane.io/v1beta1
+kind: Function
+metadata:
+  name: kcl-function
+  namespace: crossplane-system
+spec:
+  package: xpkg.upbound.io/crossplane-contrib/function-kcl:latest
+  runtimeConfigRef:
+    name: default

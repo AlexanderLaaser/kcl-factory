@@ -16,7 +16,7 @@ spec:
         apiVersion: krm.kcl.dev/v1alpha1
         kind: KCLInput
         spec:
-          source: /kcl/packages/k8s/main.k
+          source: /kcl/modules/k8s/main.k
     - step: create-azure-example
       functionRef:
         name: kcl-function
@@ -24,4 +24,4 @@ spec:
         apiVersion: krm.kcl.dev/v1alpha1
         kind: KCLInput
         spec:
-          source: /kcl/packages/azure/main.k
+          source: /kcl/modules/azure/main.k
