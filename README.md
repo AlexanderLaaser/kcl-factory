@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# KCL in Crossplane compositions with kcl-ccm
-=======
-# Using KCL for Crossplane compositions with kcl-factory
->>>>>>> fd17dff (feat: updated readme)
+# Using KCL in Crossplane compositions with kcl-factory
 
 A CLI tool that scans a KCL package root and generates:
 
@@ -25,7 +21,7 @@ Comparison possible ways to implement a compositon in crossplane:
 | **Testability**          | ❌ Hard to unit-test                  | ⚠️ Chart tests               | ⚠️ Extract & test            | ✅ `kcl run` locally          |
 | **Runs in CI/CD**        | ✅ Plain YAML                         | ⚠️ Helm in pipeline          | ✅ No extra steps            | ✅ Script + Kustomize         |
 
-**Summary:** Patch & Transform suits simple, static compositions. Helm fits teams with existing charts. KCL Inline is minimal (no mounting) but not modular. **kcl-factory** adds modularity with local development, full KCL, and structured files in one repo.
+**Summary:** Patch & Transform suits simple, static compositions. Go fits teams with existing charts. KCL Inline is minimal (no mounting) but not modular and hard to further develop. **kcl-factory** adds modularity with local development, full KCL Package modularity and structured files in one repo.
 
 ### Requirements
 
